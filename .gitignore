@@ -1,0 +1,13 @@
+# Compiled Java byte-code
+*.class
+
+# Maven output directory
+target/
+/target/
+
+# IntelliJ IDEA metadata
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
