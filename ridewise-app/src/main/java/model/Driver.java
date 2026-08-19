@@ -2,11 +2,15 @@ package model;
 
 import util.GenerateDriverId;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Driver extends Person{
 
     private final String driverId;
     private Location location;
     private boolean available;
+    private final List<Ride> rides = new ArrayList<>();
 
     public Driver() {
         location = new Location();
@@ -42,11 +46,28 @@ public class Driver extends Person{
     @Override
     public String toString() {
         return "Driver{" +
-                "name=" + getName() +
-                "contact no=" + getContactNo() +
+                "name= " + getName() +
+                "contact no= " + getContactNo() +
                 "driverId='" + driverId + '\'' +
                 ", location=" + location +
                 ", available=" + available +
                 '}';
     }
+
+    public void addRide(Ride ride) {
+        rides.add(ride);
+    }
+
+    public long getCompletedRideCount() {
+        return rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.COMPLETED)
+                .count();
+    }
+
+    public List<Ride> getRides(){
+        return rides;
+    }
+
+
+
 }

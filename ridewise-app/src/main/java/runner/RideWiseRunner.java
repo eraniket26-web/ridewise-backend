@@ -2,14 +2,13 @@ package runner;
 
 
 import exception.NoDriverAvailableException;
-import model.Driver;
-import model.Location;
-import model.Ride;
-import model.Rider;
+import model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import service.DriverService;
+import service.RideService;
 import service.RiderService;
+import strategy.*;
 import util.LocationUtil;
 import util.PersonValidator;
 
@@ -22,9 +21,15 @@ public class RideWiseRunner {
     private final DriverService driverService = new DriverService();
     private final PersonValidator validator = new PersonValidator();
     private final Scanner scanner;
+    private final Map<Integer,String> vehicleTypeMap = new HashMap<>();
+    private final RideService rideService;
 
     public RideWiseRunner() {
         this.scanner = new Scanner(System.in);
+        this.rideService = new RideService(driverService);
+        vehicleTypeMap.put(1,"Bike");
+        vehicleTypeMap.put(2,"Auto");
+        vehicleTypeMap.put(3,"Car");
     }
 
     public void start() {
@@ -58,20 +63,25 @@ public class RideWiseRunner {
                      requestRide();
                      break;
 
-//                 case 5:
-//                     completeRide();
-//                     break;
-//
-//                 case 6:
-//                     viewRides();
-//                     break;
+                 case 5:
+                     logger.info(" Enter ride id:");
+                     String rideId = scanner.nextLine();
+                     Ride ride = completeRide(rideId);
+                     logger.info("Completed Ride is {}", ride.getFareReceipt());
+                     break;
+
+                 case 6:
+                     viewRides();
+                     break;
 
                  case 7:
                      running = false;
                      logger.info("Thank you for using ridewise app ..bye !!");
                      break;
 
-
+                 default:
+                     logger.info("Invalid choice");
+                     break;
              }
 
 
@@ -79,10 +89,71 @@ public class RideWiseRunner {
 
      } catch (InputMismatchException e) {
           logger.error("Data mismatched entered by the user");
-       }
+       } catch (NoDriverAvailableException e) {
+         throw new RuntimeException(e);
+     }
     }
 
-    private void requestRide() {
+    private void viewRides() {
+
+        List<Ride> rides = rideService.getAllRides();
+
+        if (rides.isEmpty()) {
+            logger.info("No rides available.");
+            return;
+        }
+
+        logger.info("========== Ride History ==========");
+
+        rides.forEach(ride -> {
+
+            logger.info("Ride ID       : {}", ride.getRideId());
+            logger.info("Rider         : {}", ride.getRider().getName());
+
+            if (ride.getDriver() != null) {
+                logger.info("Driver        : {}", ride.getDriver().getName());
+            } else {
+                logger.info("Driver        : Not assigned");
+            }
+
+            logger.info("Vehicle       : {}", ride.getVehicleType());
+            logger.info("Distance      : {}", ride.getDistance());
+            logger.info("Destination   : {}", ride.getDestination());
+            logger.info("Status        : {}", ride.getStatus());
+
+            if (ride.getFareReceipt() != null) {
+                logger.info("Fare          : {}", ride.getFareReceipt().getAmount());
+                logger.info("Generated At  : {}", ride.getFareReceipt().getGeneratedAt());
+            }
+
+            logger.info("----------------------------------");
+        });
+    }
+
+    public Ride completeRide(String rideId) {
+
+        if (rideId == null || rideId.isBlank()) {
+            throw new IllegalArgumentException("Ride id cannot be empty");
+        }
+        Ride ride = rideService.getRideById(rideId);
+        if (ride.getStatus() != RideStatus.ASSIGNED) {
+            throw new IllegalStateException(
+                    "Ride cannot be completed. Current status: " + ride.getStatus());
+        }
+
+        ride.setStatus(RideStatus.COMPLETED);
+
+        Driver driver = ride.getDriver();
+        driverService.updateAvailability(driver, true);
+        logger.info("Ride {} completed successfully", rideId);
+        logger.info("Handed over fare receipt to rider {}", ride.getFareReceipt());
+        logger.info("Driver {} is now available", driver.getDriverId());
+
+        return ride;
+    }
+
+
+    private void requestRide() throws NoDriverAvailableException {
         logger.info(" \n Enter rider id ");
         Ride ride = new Ride();
         String riderId = scanner.nextLine();
@@ -92,33 +163,77 @@ public class RideWiseRunner {
         }
 
         logger.info("\n Enter destination");
-        Map<String,Location> locationMap = LocationUtil.getLocationMap();
-        logger.info("locationMap.keySet() {}", locationMap.keySet());
         List<String> destinationNames = new ArrayList<>(LocationUtil.getLocationMap().keySet());
         logger.info("---- Choose drop point --- \n");
 
-        for(int i = 0 ; i < destinationNames.size() ; i++){
-            logger.info("{}. {}", i + 1, destinationNames.get(i));
+        if(!destinationNames.isEmpty()) {
+            for (int i = 0; i < destinationNames.size(); i++) {
+                logger.info("{}. {}", i + 1, destinationNames.get(i));
+            }
+            Location location = showLocationChoice(destinationNames, LocationUtil.getLocationMap());
+            ride.setDestination(location);
         }
-        Location location = showLocationChoice(destinationNames,LocationUtil.getLocationMap());
-        ride.setDestination(location);
 
         logger.info("\n Enter Vehicle Type");
         logger.info("=== 1. Bike ======");
         logger.info("=== 2. Auto ======");
         logger.info("=== 3. Car =======");
 
+        /**** Accept  vehicle type *****/
+        int choice = Integer.parseInt(scanner.nextLine().trim());
+        String vehicle = getVehicleByChoice(choice,ride);
+        logger.info("Vehicle selected by rider is {}",vehicle);
 
+       ride.setStatus(RideStatus.REQUESTED);
+
+       /**** Choose ride matching strategy   ****/
+
+       logger.info("\n Choose suitable ride");
+       logger.info("=== 1. Nearest Driver ===");
+       logger.info("=== 2. Least Driver ===");
+
+        int strategyChoice = Integer.parseInt(scanner.nextLine().trim());
+        RideMatchingStrategy matchingStrategy = getRideMatchingStrategy(strategyChoice);
+        logger.info("Matching Strategy {}", matchingStrategy);
+
+
+        /**** Choose Fare strategy   ****/
+        logger.info("\n Choose suitable fare");
+        logger.info("=== 1. Default fare ===");
+        logger.info("=== 2. Peak hour Driver ===");
+
+        int fareStrategyChoice = Integer.parseInt(scanner.nextLine().trim());
+        FareStrategy fareStrategy = getFareMatchingStrategy(fareStrategyChoice);
+        logger.info("Matching Strategy {}", fareStrategy);
+        Ride assignedRide =  rideService.requestRide(ride,matchingStrategy,fareStrategy);
+        logger.info("Your ride has been booked , Driver on the way {} and contact number is {} and your ride id is {}",
+                               assignedRide.getDriver().getName(),
+                               assignedRide.getDriver().getContactNo(),
+                               assignedRide.getRideId());
 
     }
+
+    private FareStrategy getFareMatchingStrategy(int fareStrategyChoice) {
+        if(fareStrategyChoice < 1 || fareStrategyChoice > 2){
+            throw  new IllegalArgumentException("Choice should be between 1 and 2");
+        }
+        return (fareStrategyChoice == 1) ? new DefaultFareStrategy() : new PeakHourStrategy();
+    }
+
+    private RideMatchingStrategy getRideMatchingStrategy(int choice) {
+        if(choice < 1 || choice > 2){
+            throw  new IllegalArgumentException("Choice should be between 1 and 2");
+        }
+        return (choice == 1) ? new NearestDriverStrategy() : new LeastActiveDriverStrategy();
+    }
+
+
 
     private void viewAvailableDrivers() throws NoDriverAvailableException {
           List<Driver> availableDriversList = driverService.getAvailableDrivers();
           if(!availableDriversList.isEmpty()){
               logger.info("----- Available drivers ------- \n");
-              availableDriversList.forEach(data -> {
-                   logger.info(" Drivers {}", data);
-              });
+              availableDriversList.forEach(data -> logger.info(" Drivers {}", data));
           }else {
               logger.info(" Currently no driver is available now ... !!");
               throw new NoDriverAvailableException("No driver available at the moment !!");
@@ -150,10 +265,6 @@ public class RideWiseRunner {
         }catch (Exception e){
             logger.error("Exception occurs during driver registration {}", e.getMessage());
         }
-
-
-
-
     }
 
     private void addRider() {
@@ -175,7 +286,7 @@ public class RideWiseRunner {
 
             riderService.registerRider(rider);
 
-            logger.info("Rider {}", riderService.getRider(rider.getRiderId()));
+//            logger.info("Rider {}", riderService.getRider(rider.getRiderId()));
 
         }catch (Exception e){
             logger.error("Exception occurs during rider registration {}", e.getMessage());
@@ -219,6 +330,20 @@ public class RideWiseRunner {
         }
 
         return selectedLocation;
+    }
+
+
+    private String getVehicleByChoice(int choice, Ride ride){
+        String vehicle =  vehicleTypeMap.getOrDefault(choice,"");
+        if(!vehicle.isEmpty()){
+            for(VehicleType vehicleType : VehicleType.values()){
+                if(vehicle.equalsIgnoreCase(vehicleType.name())){
+                    ride.setVehicleType(vehicleType);
+                    break;
+                }
+            }
+        }
+       return vehicleTypeMap.getOrDefault(choice,"");
     }
 
 

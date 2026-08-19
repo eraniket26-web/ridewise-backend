@@ -4,13 +4,14 @@ import util.GenerateRideId;
 
 public class Ride {
 
-    private String rideId;
+    private final String rideId;
     private Rider rider;
     private Driver driver;
     private RideStatus status;
     private double distance;
     private VehicleType vehicleType;
     private Location destination;
+    private FareReceipt fareReceipt;
 
     public Ride() {this.rideId = GenerateRideId.getRideId();}
 
@@ -72,5 +73,27 @@ public class Ride {
 
     public void setDestination(Location destination) {
         this.destination = destination;
+    }
+
+    public FareReceipt getFareReceipt() {
+        return fareReceipt;
+    }
+
+    public void setFareReceipt(FareReceipt fareReceipt) {
+        this.fareReceipt = fareReceipt;
+    }
+
+    @Override
+    public String toString() {
+        return "Ride{" +
+                "rideId='" + rideId + '\'' +
+                ", rider=" + rider +
+                ", driver=" + driver +
+                ", status=" + status +
+                ", distance=" + distance +
+                ", vehicleType=" + vehicleType +
+                ", destination=" + destination +
+                ", fareReceipt=" + fareReceipt +
+                '}';
     }
 }

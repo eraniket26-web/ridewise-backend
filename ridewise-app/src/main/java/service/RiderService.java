@@ -16,7 +16,7 @@ public class RiderService {
 
     public void registerRider(Rider rider){
         riders.add(rider);
-        logger.info("{} registered successfully !!",rider.getName());
+        logger.info("{} registered successfully with id {} !!",rider.getName(), rider.getRiderId());
     }
 
     public Rider getRider(String riderId){
