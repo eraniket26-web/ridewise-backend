@@ -7,7 +7,7 @@ public class GenerateDriverId {
     private static int driverIdCounter = 0;
 
     public static String getDriverId() {
-        return String.format("D%04d", ++driverIdCounter);
+        return String.format("DRIVER%04d", ++driverIdCounter);
 
     }
 }

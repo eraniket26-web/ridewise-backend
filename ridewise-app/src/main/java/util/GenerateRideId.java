@@ -7,6 +7,6 @@ public class GenerateRideId {
     private static int rideIdCounter = 0;
 
     public static String getRideId(){
-        return String.format("R%04d",++rideIdCounter);
+        return String.format("RIDE%04d",++rideIdCounter);
     }
 }
